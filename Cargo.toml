@@ -1,0 +1,22 @@
+[package]
+name = "taskwarrior-cachingshim"
+version = "0.1.0"
+edition = "2021"
+build = "infra/build/build.rs"
+
+[[bin]]
+name = "taskwarrior-cachingshim"
+path = "src/main/rust/application.rs"
+
+[[test]]
+name = "e2e_commands"
+path = "src/test/rust/e2e/e2e_commands.rs"
+
+[dev-dependencies]
+serde_json = "1"
+
+[profile.dev]
+debug = true
+
+[profile.release]
+debug = false
