@@ -43,3 +43,12 @@ Cacheable commands: `_get`, `show`, bare `context`, `--version`.
 A command not listed is not cached. Listing a command that is not a
 cacheable read (say `cached_commands.add=true`) does nothing, no error.
 `context work` is a write, not a read - it always passes through.
+
+## Tests
+
+```sh
+cargo test
+```
+
+The e2e tests run the real taskwarrior binary against an isolated data
+dir in /tmp - your own `~/.task` is never touched.  
