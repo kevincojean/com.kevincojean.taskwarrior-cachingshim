@@ -3,8 +3,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::Mutex;
 
-use taskwarrior_cachingshim::dispatcher::{is_cacheable, Config};
-
 static SERIAL: Mutex<()> = Mutex::new(());
 
 const TEST_DIR: &str = "/tmp/taskwarrior-cachingshim-test";
@@ -28,7 +26,13 @@ fn real_task() -> &'static str {
     "/usr/local/bin/task"
 }
 
-fn vectors() -> Vec<Vec<String>> {
+#[derive(serde::Deserialize)]
+struct Recorded {
+    argv: Vec<String>,
+    cacheable: bool,
+}
+
+fn vectors() -> Vec<Recorded> {
     let raw = fs::read_to_string("src/test/resources/commands-to-test.jsonl").unwrap();
     raw.lines()
         .filter(|l| !l.trim().is_empty())
@@ -86,16 +90,13 @@ fn logged(tag: &str) -> usize {
 fn given_cacheable_read_when_run_twice_then_second_is_hit() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
-    let config = Config::from_generated();
-    let cacheable: Vec<_> = vectors()
-        .into_iter()
-        .filter(|v| is_cacheable(v, &config))
-        .collect();
+    let cacheable: Vec<_> = vectors().into_iter().filter(|v| v.cacheable).collect();
     assert!(!cacheable.is_empty());
 
     let mut hits = 0;
     let mut misses = 0;
-    for argv in &cacheable {
+    for rec in &cacheable {
+        let argv = &rec.argv;
         let args: Vec<String> = argv[1..].to_vec();
         let real = run_real(&args, &data, &taskrc);
         let first = run_shim(&args, &data, &taskrc);
@@ -151,14 +152,11 @@ fn given_cacheable_read_when_run_twice_then_second_is_hit() {
 fn given_passthrough_command_when_run_then_always_execs_real_task() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (_, taskrc) = setup_isolated_env();
-    let config = Config::from_generated();
-    let passthrough: Vec<_> = vectors()
-        .into_iter()
-        .filter(|v| !is_cacheable(v, &config))
-        .collect();
+    let passthrough: Vec<_> = vectors().into_iter().filter(|v| !v.cacheable).collect();
     assert!(!passthrough.is_empty());
 
-    for argv in &passthrough {
+    for rec in &passthrough {
+        let argv = &rec.argv;
         let args: Vec<String> = argv[1..].to_vec();
         let real_data = fresh_data_dir("real");
         let shim_data = fresh_data_dir("shim");
@@ -188,11 +186,7 @@ fn given_passthrough_command_when_run_then_always_execs_real_task() {
 fn given_warm_cache_when_taskrc_touched_then_next_run_misses() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
-    let config = Config::from_generated();
-    let argv = vectors()
-        .into_iter()
-        .find(|v| is_cacheable(v, &config))
-        .unwrap();
+    let argv = vectors().into_iter().find(|v| v.cacheable).unwrap().argv;
     let args: Vec<String> = argv[1..].to_vec();
 
     run_shim(&args, &data, &taskrc);

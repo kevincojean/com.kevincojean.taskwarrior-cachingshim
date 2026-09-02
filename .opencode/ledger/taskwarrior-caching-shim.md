@@ -123,3 +123,50 @@ add flow, gate on the SECOND warm flow, release build):
 - cargo test: 8 passed (3 unit + 5 e2e incl. context_write_form_never_cached
   and add_preserves_config_cache).
 - Not committed. Next per plan: half-day daily-drive before done.
+
+## 2026-09-02 - code review batch: lib+bin split, bincode, renames
+
+Post-rev-13 review decisions applied (all behavior-preserving, suite green
+throughout - no new RED required):
+
+- Structure deviation from the plan's "four files": added `src/main/rust/lib.rs`.
+  Rust cannot import a bin crate from an integration test; the review asked
+  e2e to call production `is_cacheable`, so logic moved to a lib crate and
+  `application.rs` is now a 7-line main. Community convention (camp 2:
+  lib + thin bin; cf. cargo, bat, starship). Community alternatives were
+  bin-only + subprocess black-box tests (fd, assert_cmd) or a lib workspace
+  (rust-analyzer). We are hybrid: e2e still spawns the real binary against
+  real taskwarrior; the lib import exists only so test and prod cannot
+  disagree on classification.
+- Cache entry format: hand-rolled byte layout replaced by serde+bincode
+  (`CachedResult` derives Serialize/Deserialize). Old-format entries fail
+  to deserialize -> treated as miss -> overwritten. Self-healing, no migration.
+- `is_cacheable(argv, config)` is now production API in dispatcher.rs;
+  dispatch() simplified (dead `_ =>` arm gone).
+- Renames: taskrc_mtimes -> taskrc_last_modified_times,
+  file_mtime -> file_last_modified_ns, emit -> replay_output (NOT
+  replay_cache_hit: the miss path calls it too), fnv1a -> fnv1a_algorithm.
+- Two docstrings kept by explicit request: include-chain rationale (user's
+  taskrc has 4 real includes - themes, secrets, uda-nautical.conf), and
+  FNV-1a choice rationale.
+- serde_json stays `"1"` in dev-dependencies; Cargo.lock is the pin.
+
+## 2026-09-02 - SUPERSEDES lib+bin note: reverted to camp 1 (bin-only)
+
+The lib+bin split logged above was reverted at user direction. They are
+"camp 1": e2e tests assert inputs and outputs through the process boundary,
+never import production code.
+
+Final shape:
+- No lib.rs. application.rs is again the crate root (bin-only, four files).
+- Production is_cacheable deleted; dispatch() uses classify()+is_cached directly.
+- commands-to-test.jsonl now records each vector's OWN expectation:
+  {"argv":[...],"cacheable":bool}. 9 true (all _get/show, bare context,
+  bare --version), 6 false. e2e filters on the recorded flag - no duplicated
+  classify logic in the test, no lib import.
+- The cacheable:true set is validated black-box: the run-twice test asserts
+  cache_hits == count(cacheable), so if prod ever diverges from the recorded
+  expectation the suite goes red. Expectation lives in data, verification at
+  the seam.
+- bincode/serde cache format, renames, and docstrings from the review batch
+  all KEPT (unrelated to the camp question).

@@ -4,10 +4,6 @@ version = "0.1.0"
 edition = "2021"
 build = "infra/build/build.rs"
 
-[lib]
-name = "taskwarrior_cachingshim"
-path = "src/main/rust/lib.rs"
-
 [[bin]]
 name = "taskwarrior-cachingshim"
 path = "src/main/rust/application.rs"

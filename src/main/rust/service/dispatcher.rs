@@ -98,10 +98,6 @@ pub struct Dispatcher {
     cache: Cache,
 }
 
-pub fn is_cacheable(argv: &[String], config: &Config) -> bool {
-    config.is_cached(&classify(argv))
-}
-
 impl Dispatcher {
     pub fn new(config: Config) -> Dispatcher {
         let cache = Cache::new(&config);

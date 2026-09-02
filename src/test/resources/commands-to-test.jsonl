@@ -1,15 +1,15 @@
-["task","rc.color=off","rc._forcecolor=off","rc.defaultwidth=0","show"]
-["task","_get","rc.report.malformed.filter"]
-["task","rc.hooks=off","rc.context=none","rc.verbose=nothing","rc.confirmation=off","rc.history=off","rc.gc=off","export"]
-["task","rc.hooks=off","rc.context=none","rc.verbose=nothing","rc.history=off","rc.gc=off","count","(status:pending or status:waiting) -BLOCKED"]
-["task","--version"]
-["task","show","rc.defaultwidth=0","report.next.labels"]
-["task","show","rc.defaultwidth=0","report.next.dateformat"]
-["task","_get","rc.context"]
-["task","_get","rc.context.99_inbox.read"]
-["task","show","rc.defaultwidth=0","report.next.columns"]
-["task","rc.json.array=on","rc.confirmation=off","rc.json.depends.array=on","rc.color=off","rc._forcecolor=off","rc.report.next.filter=(status:pending or status:waiting) -WAITING and -buy and project.not:blog.post and (+zombie or +notsmart or +inbox or (-niu -iu -inu -ninu))","export","next"]
-["task","context"]
-["task","summary"]
-["task","rc.color=off","rc._forcecolor=off","rc.verbose=nothing","rc.defaultwidth=233","timesheet"]
-["task","add","STRACE-PROBE delete me"]
+{"argv":["task","rc.color=off","rc._forcecolor=off","rc.defaultwidth=0","show"],"cacheable":true}
+{"argv":["task","_get","rc.report.malformed.filter"],"cacheable":true}
+{"argv":["task","rc.hooks=off","rc.context=none","rc.verbose=nothing","rc.confirmation=off","rc.history=off","rc.gc=off","export"],"cacheable":false}
+{"argv":["task","rc.hooks=off","rc.context=none","rc.verbose=nothing","rc.history=off","rc.gc=off","count","(status:pending or status:waiting) -BLOCKED"],"cacheable":false}
+{"argv":["task","--version"],"cacheable":true}
+{"argv":["task","show","rc.defaultwidth=0","report.next.labels"],"cacheable":true}
+{"argv":["task","show","rc.defaultwidth=0","report.next.dateformat"],"cacheable":true}
+{"argv":["task","_get","rc.context"],"cacheable":true}
+{"argv":["task","_get","rc.context.99_inbox.read"],"cacheable":true}
+{"argv":["task","show","rc.defaultwidth=0","report.next.columns"],"cacheable":true}
+{"argv":["task","rc.json.array=on","rc.confirmation=off","rc.json.depends.array=on","rc.color=off","rc._forcecolor=off","rc.report.next.filter=(status:pending or status:waiting) -WAITING and -buy and project.not:blog.post and (+zombie or +notsmart or +inbox or (-niu -iu -inu -ninu))","export","next"],"cacheable":false}
+{"argv":["task","context"],"cacheable":true}
+{"argv":["task","summary"],"cacheable":false}
+{"argv":["task","rc.color=off","rc._forcecolor=off","rc.verbose=nothing","rc.defaultwidth=233","timesheet"],"cacheable":false}
+{"argv":["task","add","STRACE-PROBE delete me"],"cacheable":false}
