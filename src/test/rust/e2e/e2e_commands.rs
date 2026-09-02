@@ -88,7 +88,7 @@ fn log_miss_count() -> usize {
 }
 
 #[test]
-fn cacheable_byte_identical_and_second_run_hit() {
+fn given_cacheable_read_when_run_twice_then_second_is_hit() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
     let cacheable: Vec<_> = vectors().into_iter().filter(|v| is_cacheable(v)).collect();
@@ -149,7 +149,7 @@ fn cacheable_byte_identical_and_second_run_hit() {
 }
 
 #[test]
-fn passthrough_always_execs_real_task() {
+fn given_passthrough_command_when_run_then_always_execs_real_task() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (_, taskrc) = setup_isolated_env();
     let passthrough: Vec<_> = vectors().into_iter().filter(|v| !is_cacheable(v)).collect();
@@ -182,7 +182,7 @@ fn passthrough_always_execs_real_task() {
 }
 
 #[test]
-fn touch_taskrc_next_run_is_miss() {
+fn given_warm_cache_when_taskrc_touched_then_next_run_misses() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
     let argv = vectors().into_iter().find(|v| is_cacheable(v)).unwrap();
@@ -205,7 +205,7 @@ fn touch_taskrc_next_run_is_miss() {
 }
 
 #[test]
-fn context_write_form_never_cached() {
+fn given_context_switch_when_run_twice_then_never_cached() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
     let mut content = TASKRC_CONTENT.to_string();
@@ -235,7 +235,7 @@ fn context_write_form_never_cached() {
 }
 
 #[test]
-fn add_preserves_config_cache() {
+fn given_warm_cache_when_add_passes_then_cache_survives() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
     let get_args = vec!["_get".to_string(), "rc.context".to_string()];
