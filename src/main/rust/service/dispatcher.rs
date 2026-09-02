@@ -98,6 +98,10 @@ pub struct Dispatcher {
     cache: Cache,
 }
 
+pub fn is_cacheable(argv: &[String], config: &Config) -> bool {
+    config.is_cached(&classify(argv))
+}
+
 impl Dispatcher {
     pub fn new(config: Config) -> Dispatcher {
         let cache = Cache::new(&config);
@@ -106,17 +110,10 @@ impl Dispatcher {
 
     pub fn dispatch(&mut self, argv: &[String]) -> i32 {
         let class = classify(argv);
-        match class {
-            CommandClass::GetConfig
-            | CommandClass::ShowConfig
-            | CommandClass::ListContexts
-            | CommandClass::Version
-                if self.config.is_cached(&class) =>
-            {
-                self.cache.run(&class, argv, &self.config)
-            }
-            CommandClass::Passthrough => passthrough::run(argv, &self.config),
-            _ => passthrough::run(argv, &self.config),
+        if self.config.is_cached(&class) {
+            self.cache.run(&class, argv, &self.config)
+        } else {
+            passthrough::run(argv, &self.config)
         }
     }
 }

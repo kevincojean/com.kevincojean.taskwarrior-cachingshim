@@ -1,4 +1,4 @@
-# taskwarrior-cachingshim
+# Taskwarrior caching shim
 
 Taskwarrior powerusers have large task databases.  
 Client applications use the `task` process to populate views.  

@@ -2,9 +2,12 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::dispatcher::{CommandClass, Config};
 use crate::taskwarrior_passthrough_commands as passthrough;
 
+#[derive(Serialize, Deserialize)]
 pub struct CachedResult {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
@@ -28,7 +31,7 @@ impl Cache {
         let key = self.compute_key(class, argv, config);
         if let Some(result) = self.get(&key) {
             self.log("HIT", &key);
-            emit(&result);
+            replay_output(&result);
             return result.exit_code;
         }
         self.log("MISS", &key);
@@ -39,7 +42,7 @@ impl Cache {
             exit_code: captured.exit_code,
         };
         self.put(&key, &result);
-        emit(&result);
+        replay_output(&result);
         result.exit_code
     }
 
@@ -50,17 +53,17 @@ impl Cache {
             material.push('\u{0}');
             material.push_str(a);
         }
-        for mtime in self.taskrc_mtimes(config) {
+        for mtime in self.taskrc_last_modified_times(config) {
             material.push_str(&format!(",{}", mtime));
         }
         material.push_str(&format!(
             ",{}",
-            file_mtime(Path::new(&config.task_path)).unwrap_or(0)
+            file_last_modified_ns(Path::new(&config.task_path)).unwrap_or(0)
         ));
-        format!("{:016x}", fnv1a(material.as_bytes()))
+        format!("{:016x}", fnv1a_algorithm(material.as_bytes()))
     }
 
-    fn taskrc_mtimes(&self, _config: &Config) -> Vec<u64> {
+    fn taskrc_last_modified_times(&self, _config: &Config) -> Vec<u64> {
         let taskrc = std::env::var("TASKRC")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
@@ -69,7 +72,10 @@ impl Cache {
             });
         let mut files = Vec::new();
         collect_include_chain(&taskrc, &mut files);
-        files.iter().map(|p| file_mtime(p).unwrap_or(0)).collect()
+        files
+            .iter()
+            .map(|p| file_last_modified_ns(p).unwrap_or(0))
+            .collect()
     }
 
     fn cache_path(&self, key: &str) -> PathBuf {
@@ -78,7 +84,7 @@ impl Cache {
 
     fn get(&self, key: &str) -> Option<CachedResult> {
         let bytes = fs::read(self.cache_path(key)).ok()?;
-        parse_cache(&bytes)
+        bincode::deserialize(&bytes).ok()
     }
 
     fn put(&self, key: &str, result: &CachedResult) {
@@ -87,12 +93,7 @@ impl Cache {
         }
         let path = self.cache_path(key);
         let tmp = self.dir.join(format!("{key}.tmp"));
-        let mut bytes = Vec::new();
-        bytes.extend_from_slice(&result.exit_code.to_le_bytes());
-        bytes.extend_from_slice(&(result.stdout.len() as u32).to_le_bytes());
-        bytes.extend_from_slice(&result.stdout);
-        bytes.extend_from_slice(&(result.stderr.len() as u32).to_le_bytes());
-        bytes.extend_from_slice(&result.stderr);
+        let bytes = bincode::serialize(result).unwrap();
         fs::write(&tmp, bytes).unwrap();
         fs::rename(&tmp, &path).unwrap();
     }
@@ -112,6 +113,10 @@ impl Cache {
     }
 }
 
+/// A taskrc can pull in other files via `include <path>` lines (themes,
+/// UDAs, secrets). Config edits in those files must invalidate the cache
+/// too, so the cache key collects the last-modified time of every file in
+/// the include chain, not just the top-level taskrc.
 fn collect_include_chain(path: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(content) = fs::read_to_string(path) {
         out.push(path.to_path_buf());
@@ -124,7 +129,7 @@ fn collect_include_chain(path: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn file_mtime(path: &Path) -> Option<u64> {
+fn file_last_modified_ns(path: &Path) -> Option<u64> {
     let meta = fs::metadata(path).ok()?;
     let modified = meta.modified().ok()?;
     Some(
@@ -135,25 +140,7 @@ fn file_mtime(path: &Path) -> Option<u64> {
     )
 }
 
-fn parse_cache(bytes: &[u8]) -> Option<CachedResult> {
-    let mut idx = 0;
-    let exit_code = i32::from_le_bytes(bytes.get(idx..idx + 4)?.try_into().ok()?);
-    idx += 4;
-    let stdout_len = u32::from_le_bytes(bytes.get(idx..idx + 4)?.try_into().ok()?);
-    idx += 4;
-    let stdout = bytes.get(idx..idx + stdout_len as usize)?.to_vec();
-    idx += stdout_len as usize;
-    let stderr_len = u32::from_le_bytes(bytes.get(idx..idx + 4)?.try_into().ok()?);
-    idx += 4;
-    let stderr = bytes.get(idx..idx + stderr_len as usize)?.to_vec();
-    Some(CachedResult {
-        stdout,
-        stderr,
-        exit_code,
-    })
-}
-
-fn emit(result: &CachedResult) {
+fn replay_output(result: &CachedResult) {
     let mut out = std::io::stdout().lock();
     let _ = out.write_all(&result.stdout);
     let _ = out.flush();
@@ -162,7 +149,11 @@ fn emit(result: &CachedResult) {
     let _ = err.flush();
 }
 
-fn fnv1a(bytes: &[u8]) -> u64 {
+/// FNV-1a: chosen because it is deterministic across processes (cache
+/// entries written by one run must be found by the next), needs no
+/// dependency, and non-cryptographic is fine - it hashes argv and
+/// mtimes for a cache filename, nothing security-sensitive.
+fn fnv1a_algorithm(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for b in bytes {
         hash ^= *b as u64;

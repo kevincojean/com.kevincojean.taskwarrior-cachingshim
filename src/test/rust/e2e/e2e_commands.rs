@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::Mutex;
 
+use taskwarrior_cachingshim::dispatcher::{is_cacheable, Config};
+
 static SERIAL: Mutex<()> = Mutex::new(());
 
 const TEST_DIR: &str = "/tmp/taskwarrior-cachingshim-test";
@@ -67,31 +69,28 @@ fn run_real(args: &[String], data: &Path, taskrc: &Path) -> Output {
         .unwrap()
 }
 
-fn is_cacheable(argv: &[String]) -> bool {
-    let mut iter = argv.iter().skip(1).filter(|a| !a.starts_with("rc."));
-    match iter.next().map(String::as_str) {
-        Some("_get") | Some("show") => true,
-        Some("context") => iter.next().is_none(),
-        Some("--version") => iter.next().is_none(),
-        _ => false,
-    }
+fn cache_hits() -> usize {
+    logged("HIT")
 }
 
-fn log_hit_count() -> usize {
-    let content = fs::read_to_string(LOG_FILE).unwrap_or_default();
-    content.lines().filter(|l| l.starts_with("HIT")).count()
+fn cache_misses() -> usize {
+    logged("MISS")
 }
 
-fn log_miss_count() -> usize {
+fn logged(tag: &str) -> usize {
     let content = fs::read_to_string(LOG_FILE).unwrap_or_default();
-    content.lines().filter(|l| l.starts_with("MISS")).count()
+    content.lines().filter(|l| l.starts_with(tag)).count()
 }
 
 #[test]
 fn given_cacheable_read_when_run_twice_then_second_is_hit() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
-    let cacheable: Vec<_> = vectors().into_iter().filter(|v| is_cacheable(v)).collect();
+    let config = Config::from_generated();
+    let cacheable: Vec<_> = vectors()
+        .into_iter()
+        .filter(|v| is_cacheable(v, &config))
+        .collect();
     assert!(!cacheable.is_empty());
 
     let mut hits = 0;
@@ -137,12 +136,12 @@ fn given_cacheable_read_when_run_twice_then_second_is_hit() {
         misses += 1;
     }
     assert_eq!(
-        log_hit_count(),
+        cache_hits(),
         hits,
         "each cacheable vector must log one HIT on 2nd run"
     );
     assert_eq!(
-        log_miss_count(),
+        cache_misses(),
         misses,
         "each cacheable vector must log one MISS on 1st run"
     );
@@ -152,7 +151,11 @@ fn given_cacheable_read_when_run_twice_then_second_is_hit() {
 fn given_passthrough_command_when_run_then_always_execs_real_task() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (_, taskrc) = setup_isolated_env();
-    let passthrough: Vec<_> = vectors().into_iter().filter(|v| !is_cacheable(v)).collect();
+    let config = Config::from_generated();
+    let passthrough: Vec<_> = vectors()
+        .into_iter()
+        .filter(|v| !is_cacheable(v, &config))
+        .collect();
     assert!(!passthrough.is_empty());
 
     for argv in &passthrough {
@@ -178,19 +181,23 @@ fn given_passthrough_command_when_run_then_always_execs_real_task() {
             argv
         );
     }
-    assert_eq!(log_hit_count(), 0, "passthrough must never be cached");
+    assert_eq!(cache_hits(), 0, "passthrough must never be cached");
 }
 
 #[test]
 fn given_warm_cache_when_taskrc_touched_then_next_run_misses() {
     let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (data, taskrc) = setup_isolated_env();
-    let argv = vectors().into_iter().find(|v| is_cacheable(v)).unwrap();
+    let config = Config::from_generated();
+    let argv = vectors()
+        .into_iter()
+        .find(|v| is_cacheable(v, &config))
+        .unwrap();
     let args: Vec<String> = argv[1..].to_vec();
 
     run_shim(&args, &data, &taskrc);
     run_shim(&args, &data, &taskrc);
-    assert_eq!(log_hit_count(), 1, "second run must be a HIT");
+    assert_eq!(cache_hits(), 1, "second run must be a HIT");
 
     let mut touched = TASKRC_CONTENT.to_string();
     touched.push_str("\n# touched\n");
@@ -198,7 +205,7 @@ fn given_warm_cache_when_taskrc_touched_then_next_run_misses() {
     let after_touch = run_shim(&args, &data, &taskrc);
     assert_eq!(after_touch.status.code(), Some(0));
     assert_eq!(
-        log_miss_count(),
+        cache_misses(),
         2,
         "touching taskrc must invalidate the cache key -> MISS"
     );
@@ -218,12 +225,12 @@ fn given_context_switch_when_run_twice_then_never_cached() {
     run_shim(&args, &data, &taskrc);
     run_shim(&args, &data, &taskrc);
     assert_eq!(
-        log_hit_count(),
+        cache_hits(),
         0,
         "context <name> is a write and must never be cached"
     );
     assert_eq!(
-        log_miss_count(),
+        cache_misses(),
         0,
         "context <name> must never reach the cache module at all"
     );
@@ -243,7 +250,7 @@ fn given_warm_cache_when_add_passes_then_cache_survives() {
     // warm the cache for the config read
     run_shim(&get_args, &data, &taskrc);
     run_shim(&get_args, &data, &taskrc);
-    assert_eq!(log_hit_count(), 1, "2nd config read must be a HIT");
+    assert_eq!(cache_hits(), 1, "2nd config read must be a HIT");
 
     // a mutation op passes through but must not wipe the cache
     let add_data = fresh_data_dir("add");
@@ -253,6 +260,6 @@ fn given_warm_cache_when_add_passes_then_cache_survives() {
 
     // the next config read is still a HIT and the cache dir survives
     run_shim(&get_args, &data, &taskrc);
-    assert_eq!(log_hit_count(), 2, "add must not clear the config cache");
-    assert_eq!(log_miss_count(), 1, "only the first config read may MISS");
+    assert_eq!(cache_hits(), 2, "add must not clear the config cache");
+    assert_eq!(cache_misses(), 1, "only the first config read may MISS");
 }
