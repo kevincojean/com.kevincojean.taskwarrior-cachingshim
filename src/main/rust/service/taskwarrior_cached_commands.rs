@@ -117,12 +117,21 @@ impl Cache {
 /// UDAs, secrets). Config edits in those files must invalidate the cache
 /// too, so the cache key collects the last-modified time of every file in
 /// the include chain, not just the top-level taskrc.
+fn expand_include_path(raw: &str) -> PathBuf {
+    if let Some(rest) = raw.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(raw)
+}
+
 fn collect_include_chain(path: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(content) = fs::read_to_string(path) {
         out.push(path.to_path_buf());
         for line in content.lines() {
             if let Some(rest) = line.trim_start().strip_prefix("include ") {
-                let inc = PathBuf::from(rest.trim());
+                let inc = expand_include_path(rest.trim());
                 collect_include_chain(&inc, out);
             }
         }
